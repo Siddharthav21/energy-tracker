@@ -304,6 +304,7 @@ input[type="date"]:focus { border-color: var(--accent); }
     </div>
     <div class="sidebar-footer">
       <div class="user-email" id="sidebarStatus">Syncing...</div>
+      <div onclick="openSyncModal()" style="font-size:10px;color:#00f5ff;cursor:pointer;margin-top:6px;opacity:0.8">&#8635; Sync devices</div>
     </div>
   </div>
 
@@ -436,6 +437,7 @@ input[type="date"]:focus { border-color: var(--accent); }
         <div class="mnav-label">Tips</div>
       </div>
     </div>
+    <div style="text-align:center;padding:4px 0 2px;border-top:1px solid #1a2340;margin-top:4px"><span onclick="openSyncModal()" style="font-size:10px;color:#00f5ff;cursor:pointer">⟳ Sync devices</span></div>
   </div>
 
   <!-- FAB -->
@@ -687,6 +689,7 @@ function initApp() {
       document.getElementById('chartDD').classList.remove('open');
     }
   });
+  document.getElementById("syncModal").addEventListener("click", e => { if(e.target===document.getElementById("syncModal")) closeSyncModal(); });
   loadData();
 }
 
@@ -1173,6 +1176,45 @@ function addInsight() {
 // Close modals on overlay click
 document.getElementById('logModal').addEventListener('click', e => { if(e.target===document.getElementById('logModal')) closeLogModal(); });
 document.getElementById('editModal').addEventListener('click', e => { if(e.target===document.getElementById('editModal')) closeEditModal(); });
+
+function openSyncModal() {
+  const currentBinId = localStorage.getItem("owl_bin_id") || "";
+  document.getElementById("syncBinIdInput").value = currentBinId;
+  document.getElementById("syncModal").classList.add("open");
+}
+function closeSyncModal() {
+  document.getElementById("syncModal").classList.remove("open");
+}
+async function saveSyncBinId() {
+  const val = document.getElementById("syncBinIdInput").value.trim();
+  if(!val) { alert("Please enter a Bin ID"); return; }
+  localStorage.setItem("owl_bin_id", val);
+  BIN_ID = val;
+  closeSyncModal();
+  await loadData();
+}
+function copySyncBinId() {
+  const id = localStorage.getItem("owl_bin_id") || "";
+  if(!id) { alert("No Bin ID found yet"); return; }
+  navigator.clipboard.writeText(id).then(() => alert("Bin ID copied! Paste it on your other device."));
+}
+
 </script>
+
+<!-- SYNC MODAL -->
+<div class="modal-overlay" id="syncModal">
+  <div class="modal">
+    <h3>Sync Devices</h3>
+    <div class="modal-sub">Use the same Bin ID across all your devices</div>
+    <label class="field-label">Step 1 — On your main device, copy your Bin ID</label>
+    <button onclick="copySyncBinId()" style="width:100%;padding:10px;background:rgba(0,245,255,0.08);border:1px solid rgba(0,245,255,0.2);color:#00f5ff;border-radius:8px;cursor:pointer;font-family:monospace;font-size:12px;margin-bottom:16px">Copy my Bin ID to clipboard</button>
+    <label class="field-label">Step 2 — On this device, paste the Bin ID below</label>
+    <input type="text" id="syncBinIdInput" placeholder="Paste Bin ID here" style="margin-bottom:16px">
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeSyncModal()">Cancel</button>
+      <button class="btn-save" onclick="saveSyncBinId()">Sync Now</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
