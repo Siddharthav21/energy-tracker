@@ -348,20 +348,24 @@ input[type="date"]:focus { border-color: var(--accent); }
             </div>
           </div>
         </div>
-        <div id="chart-line" class="chart-view active">
-          <svg id="lineSvg" viewBox="0 0 800 120" preserveAspectRatio="none" style="width:100%;height:100px">
-            <defs><linearGradient id="lineGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#00f5ff" stop-opacity="0.2"/><stop offset="100%" stop-color="#00f5ff" stop-opacity="0"/></linearGradient></defs>
-          </svg>
+        <div style="position:relative;overflow:hidden">
+          <div id="chart-line" class="chart-view active">
+            <svg id="lineSvg" viewBox="0 0 800 140" preserveAspectRatio="none" style="width:100%;height:120px">
+              <defs><linearGradient id="lineGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#00f5ff" stop-opacity="0.2"/><stop offset="100%" stop-color="#00f5ff" stop-opacity="0"/></linearGradient></defs>
+            </svg>
+          </div>
+          <div id="chart-bar" class="chart-view">
+            <svg id="barSvg" viewBox="0 0 800 140" preserveAspectRatio="none" style="width:100%;height:120px"></svg>
+          </div>
+          <div id="chart-both" class="chart-view">
+            <svg id="bothSvg" viewBox="0 0 800 140" preserveAspectRatio="none" style="width:100%;height:120px">
+              <defs><linearGradient id="bothGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#00f5ff" stop-opacity="0.1"/><stop offset="100%" stop-color="#00f5ff" stop-opacity="0"/></linearGradient></defs>
+            </svg>
+          </div>
+          <div id="chartTooltip" style="display:none;position:absolute;background:#0f1628;border:1px solid #00f5ff;border-radius:6px;padding:5px 10px;font-size:11px;color:#e0f0ff;pointer-events:none;white-space:nowrap;z-index:10"></div>
         </div>
-        <div id="chart-bar" class="chart-view">
-          <svg id="barSvg" viewBox="0 0 800 120" preserveAspectRatio="none" style="width:100%;height:100px"></svg>
-        </div>
-        <div id="chart-both" class="chart-view">
-          <svg id="bothSvg" viewBox="0 0 800 120" preserveAspectRatio="none" style="width:100%;height:100px">
-            <defs><linearGradient id="bothGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#00f5ff" stop-opacity="0.1"/><stop offset="100%" stop-color="#00f5ff" stop-opacity="0"/></linearGradient></defs>
-          </svg>
-        </div>
-        <div class="chart-legend">
+        <div id="chartXAxis" style="display:flex;justify-content:space-between;margin-top:4px;overflow:hidden"></div>
+        <div class="chart-legend" style="margin-top:8px">
           <div class="legend-item"><div class="legend-dot" style="background:var(--accent)"></div>High (8–10)</div>
           <div class="legend-item"><div class="legend-dot" style="background:var(--accent2)"></div>Medium (4–7)</div>
           <div class="legend-item"><div class="legend-dot" style="background:var(--accent3)"></div>Low (1–3)</div>
@@ -751,13 +755,61 @@ function getColor(v) { return v>=8?'#00f5ff':v>=4?'#7b2fff':'#ff2d6e'; }
 
 function drawChart() {
   const today = (state.logs[state.currentDate] || {});
-  const pts = state.slots.map((s,i) => {
+  const allPts = state.slots.map((s,i) => {
     const e = today[s.id];
-    if(!e) return null;
-    return { x:(i/(state.slots.length-1))*800, y:120-((e.energy-1)/9)*110-5, v:e.energy, i };
-  }).filter(Boolean);
+    return { x:(i/(state.slots.length-1))*800, y:e?110-((e.energy-1)/9)*100-5:null, v:e?e.energy:null, display:s.display, id:s.id, i };
+  });
+  const pts = allPts.filter(p=>p.v!==null);
 
   const empty = `<text x="400" y="65" text-anchor="middle" font-size="12" fill="#3a5070" font-family="DM Mono,monospace">Log entries to see your curve</text>`;
+
+  // X AXIS — show every 4th slot label
+  const axis = document.getElementById('chartXAxis');
+  if(axis) {
+    axis.innerHTML = state.slots.map((s,i) => {
+      const show = i===0 || i===state.slots.length-1 || i%4===0;
+      return `<div style="font-size:9px;color:${show?'#3a5070':'transparent'};text-align:center;flex:1;white-space:nowrap;overflow:hidden">${s.display}</div>`;
+    }).join('');
+  }
+
+  // TOOLTIP setup — shared across all chart types
+  function addTooltipEvents(svgEl) {
+    svgEl.addEventListener('mousemove', handleChartHover);
+    svgEl.addEventListener('touchmove', e => { e.preventDefault(); handleChartHover(e.touches[0]); }, {passive:false});
+    svgEl.addEventListener('mouseleave', hideTooltip);
+    svgEl.addEventListener('touchend', hideTooltip);
+  }
+
+  function handleChartHover(e) {
+    const svg = e.target.closest('svg');
+    if(!svg) return;
+    const rect = svg.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    const idx = Math.round(x * (state.slots.length - 1));
+    if(idx < 0 || idx >= state.slots.length) return;
+    const slot = state.slots[idx];
+    const entry = today[slot.id];
+    const tip = document.getElementById('chartTooltip');
+    if(!tip) return;
+    if(entry) {
+      tip.style.display = 'block';
+      tip.innerHTML = `${slot.display} &nbsp;·&nbsp; <span style="color:${getColor(entry.energy)};font-weight:700">${entry.energy}</span> &nbsp;·&nbsp; ${['','Depleted','Very Low','Low','Sluggish','Moderate','Decent','Good','High','Very High','Peak'][entry.energy]}`;
+      const tipX = Math.min(Math.max((e.clientX - rect.left), 60), rect.width - 60);
+      tip.style.left = (tipX - 60) + 'px';
+      tip.style.top = '-32px';
+    } else {
+      tip.style.display = 'block';
+      tip.innerHTML = `${slot.display} &nbsp;·&nbsp; <span style="color:#3a5070">not logged</span>`;
+      const tipX = Math.min(Math.max((e.clientX - rect.left), 60), rect.width - 60);
+      tip.style.left = (tipX - 60) + 'px';
+      tip.style.top = '-32px';
+    }
+  }
+
+  function hideTooltip() {
+    const tip = document.getElementById('chartTooltip');
+    if(tip) tip.style.display = 'none';
+  }
 
   // LINE
   const lineSvg = document.getElementById('lineSvg');
@@ -766,23 +818,26 @@ function drawChart() {
     let d = `M ${pts[0].x} ${pts[0].y}`;
     for(let i=1;i<pts.length;i++){const cx=(pts[i-1].x+pts[i].x)/2;d+=` C ${cx} ${pts[i-1].y} ${cx} ${pts[i].y} ${pts[i].x} ${pts[i].y}`;}
     lineSvg.innerHTML = `<defs><linearGradient id="lineGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#00f5ff" stop-opacity="0.2"/><stop offset="100%" stop-color="#00f5ff" stop-opacity="0"/></linearGradient></defs>
-    <path d="${d} L ${pts[pts.length-1].x} 120 L ${pts[0].x} 120 Z" fill="url(#lineGrad)" stroke="none"/>
+    <rect x="0" y="0" width="800" height="120" fill="transparent"/>
+    <path d="${d} L ${pts[pts.length-1].x} 115 L ${pts[0].x} 115 Z" fill="url(#lineGrad)" stroke="none"/>
     <path d="${d}" fill="none" stroke="#00f5ff" stroke-width="2.5" stroke-linecap="round"/>
-    ${pts.map(p=>`<circle cx="${p.x}" cy="${p.y}" r="4" fill="${getColor(p.v)}" stroke="#050810" stroke-width="2"/>`).join('')}`;
+    ${pts.map(p=>`<circle cx="${p.x}" cy="${p.y}" r="5" fill="${getColor(p.v)}" stroke="#050810" stroke-width="2"/>`).join('')}`;
   }
+  addTooltipEvents(lineSvg);
 
   // BAR
   const barSvg = document.getElementById('barSvg');
   if(!pts.length) { barSvg.innerHTML = empty; }
   else {
     const w = 800/state.slots.length;
-    barSvg.innerHTML = state.slots.map((s,i) => {
+    barSvg.innerHTML = `<rect x="0" y="0" width="800" height="120" fill="transparent"/>` + state.slots.map((s,i) => {
       const e = (state.logs[state.currentDate]||{})[s.id];
-      if(!e) return `<rect x="${i*w+2}" y="100" width="${w-4}" height="20" fill="#1a2340" rx="2"/>`;
-      const h = ((e.energy-1)/9)*110+5;
-      return `<rect x="${i*w+2}" y="${120-h}" width="${w-4}" height="${h}" fill="${getColor(e.energy)}" rx="2" opacity="0.85"/>`;
+      if(!e) return `<rect x="${i*w+2}" y="100" width="${w-4}" height="15" fill="#1a2340" rx="2"/>`;
+      const h = ((e.energy-1)/9)*100+10;
+      return `<rect x="${i*w+2}" y="${115-h}" width="${w-4}" height="${h}" fill="${getColor(e.energy)}" rx="2" opacity="0.85"/>`;
     }).join('');
   }
+  addTooltipEvents(barSvg);
 
   // BOTH
   const bothSvg = document.getElementById('bothSvg');
@@ -791,17 +846,19 @@ function drawChart() {
     const w = 800/state.slots.length;
     const bars = state.slots.map((s,i) => {
       const e = (state.logs[state.currentDate]||{})[s.id];
-      if(!e) return `<rect x="${i*w+2}" y="100" width="${w-4}" height="20" fill="#1a2340" rx="2"/>`;
-      const h = ((e.energy-1)/9)*110+5;
-      return `<rect x="${i*w+2}" y="${120-h}" width="${w-4}" height="${h}" fill="${getColor(e.energy)}" rx="2" opacity="0.2"/>`;
+      if(!e) return `<rect x="${i*w+2}" y="100" width="${w-4}" height="15" fill="#1a2340" rx="2"/>`;
+      const h = ((e.energy-1)/9)*100+10;
+      return `<rect x="${i*w+2}" y="${115-h}" width="${w-4}" height="${h}" fill="${getColor(e.energy)}" rx="2" opacity="0.2"/>`;
     }).join('');
     let d2 = pts.length >= 2 ? `M ${pts[0].x} ${pts[0].y}` : '';
     if(pts.length >= 2) for(let i=1;i<pts.length;i++){const cx=(pts[i-1].x+pts[i].x)/2;d2+=` C ${cx} ${pts[i-1].y} ${cx} ${pts[i].y} ${pts[i].x} ${pts[i].y}`;}
     bothSvg.innerHTML = `<defs><linearGradient id="bothGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#00f5ff" stop-opacity="0.1"/><stop offset="100%" stop-color="#00f5ff" stop-opacity="0"/></linearGradient></defs>
+    <rect x="0" y="0" width="800" height="120" fill="transparent"/>
     ${bars}
-    ${pts.length>=2?`<path d="${d2} L ${pts[pts.length-1].x} 120 L ${pts[0].x} 120 Z" fill="url(#bothGrad)" stroke="none"/><path d="${d2}" fill="none" stroke="#00f5ff" stroke-width="2" stroke-linecap="round"/>`:``}
-    ${pts.map(p=>`<circle cx="${p.x}" cy="${p.y}" r="3" fill="${getColor(p.v)}" stroke="#050810" stroke-width="2"/>`).join('')}`;
+    ${pts.length>=2?`<path d="${d2} L ${pts[pts.length-1].x} 115 L ${pts[0].x} 115 Z" fill="url(#bothGrad)" stroke="none"/><path d="${d2}" fill="none" stroke="#00f5ff" stroke-width="2" stroke-linecap="round"/>`:``}
+    ${pts.map(p=>`<circle cx="${p.x}" cy="${p.y}" r="4" fill="${getColor(p.v)}" stroke="#050810" stroke-width="2"/>`).join('')}`;
   }
+  addTooltipEvents(bothSvg);
 }
 
 // ============================================================
