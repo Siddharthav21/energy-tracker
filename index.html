@@ -584,6 +584,13 @@ function updatePinDots() {
   }
 }
 
+// Keyboard support for PIN
+document.addEventListener("keydown", function(e) {
+  if(document.getElementById("pinScreen").style.display === "none") return;
+  if(e.key >= "0" && e.key <= "9") pinPress(e.key);
+  else if(e.key === "Backspace") pinDel();
+});
+
 // ============================================================
 // JSONBIN
 // ============================================================
