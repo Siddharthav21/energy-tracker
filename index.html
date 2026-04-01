@@ -775,7 +775,7 @@ function drawChart() {
   // TOOLTIP setup — shared across all chart types
   function addTooltipEvents(svgEl) {
     svgEl.addEventListener('mousemove', handleChartHover);
-    svgEl.addEventListener('touchmove', e => { e.preventDefault(); handleChartHover(e.touches[0]); }, {passive:false});
+    svgEl.addEventListener('touchmove', e => { e.preventDefault(); handleChartHover(e); }, {passive:false});
     svgEl.addEventListener('mouseleave', hideTooltip);
     svgEl.addEventListener('touchend', hideTooltip);
   }
@@ -784,25 +784,22 @@ function drawChart() {
     const svg = e.target.closest('svg');
     if(!svg) return;
     const rect = svg.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / rect.width;
-    const idx = Math.round(x * (state.slots.length - 1));
-    if(idx < 0 || idx >= state.slots.length) return;
+    const clientX = e.clientX !== undefined ? e.clientX : e.touches[0].clientX;
+    const clientY = e.clientY !== undefined ? e.clientY : e.touches[0].clientY;
+    const xRatio = (clientX - rect.left) / rect.width;
+    const idx = Math.min(Math.max(Math.round(xRatio * (state.slots.length - 1)), 0), state.slots.length - 1);
     const slot = state.slots[idx];
     const entry = today[slot.id];
     const tip = document.getElementById('chartTooltip');
     if(!tip) return;
+    const tipX = Math.min(Math.max(clientX - rect.left, 50), rect.width - 50);
+    tip.style.left = (tipX - 50) + 'px';
+    tip.style.top = '4px';
+    tip.style.display = 'block';
     if(entry) {
-      tip.style.display = 'block';
-      tip.innerHTML = `${slot.display} &nbsp;·&nbsp; <span style="color:${getColor(entry.energy)};font-weight:700">${entry.energy}</span> &nbsp;·&nbsp; ${['','Depleted','Very Low','Low','Sluggish','Moderate','Decent','Good','High','Very High','Peak'][entry.energy]}`;
-      const tipX = Math.min(Math.max((e.clientX - rect.left), 60), rect.width - 60);
-      tip.style.left = (tipX - 60) + 'px';
-      tip.style.top = '-32px';
+      tip.innerHTML = `${slot.display} · <span style="color:${getColor(entry.energy)};font-weight:700">${entry.energy}</span> · ${['','Depleted','Very Low','Low','Sluggish','Moderate','Decent','Good','High','Very High','Peak'][entry.energy]}`;
     } else {
-      tip.style.display = 'block';
-      tip.innerHTML = `${slot.display} &nbsp;·&nbsp; <span style="color:#3a5070">not logged</span>`;
-      const tipX = Math.min(Math.max((e.clientX - rect.left), 60), rect.width - 60);
-      tip.style.left = (tipX - 60) + 'px';
-      tip.style.top = '-32px';
+      tip.innerHTML = `${slot.display} · <span style="color:#3a5070">not logged</span>`;
     }
   }
 
